@@ -18,16 +18,16 @@ from __future__ import annotations
 import os
 import random
 import sqlite3
-from contextlib import closing
 import time
 from collections import deque
+from contextlib import closing
 from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
@@ -49,8 +49,9 @@ def _check_rate_limit() -> JSONResponse | None:
         _recent_requests.popleft()
     if len(_recent_requests) >= RATE_LIMIT:
         retry_after = max(1, int(RATE_WINDOW_S - (now - _recent_requests[0])) + 1)
+        message = f"Max {RATE_LIMIT} requests per {RATE_WINDOW_S:.0f}s"
         return JSONResponse(status_code=429, headers={"Retry-After": str(retry_after)},
-                            content={"error": "rate_limited", "message": f"Max {RATE_LIMIT} requests per {RATE_WINDOW_S:.0f}s"})
+                            content={"error": "rate_limited", "message": message})
     _recent_requests.append(now)
     return None
 

@@ -136,7 +136,8 @@ def build_customers() -> pd.DataFrame:
         country = rng.choice(countries, p=shares)
         f = fakers[rng.choice(MARKETS[country][2])]
         first, last = f.first_name(), f.last_name()
-        email = f"{first}.{last}{rng.integers(1, 999)}@{rng.choice(['gmail.com', 'outlook.com', 'yahoo.com', 'icloud.com'])}"
+        domain = rng.choice(["gmail.com", "outlook.com", "yahoo.com", "icloud.com"])
+        email = f"{first}.{last}{rng.integers(1, 999)}@{domain}"
         rows.append({
             "customer_id": f"C{i + 1:05d}",
             "first_name": first,
@@ -200,7 +201,7 @@ def build_day_orders(day: date, customers: pd.DataFrame, products: pd.DataFrame)
     hours = rng.choice(24, size=n, p=_hour_profile())
     seconds = rng.integers(0, 3600, size=n)
     ts = [datetime(day.year, day.month, day.day, int(h), tzinfo=SAST) + timedelta(seconds=int(s))
-          for h, s in zip(hours, seconds)]
+          for h, s in zip(hours, seconds, strict=True)]
 
     prod = products.iloc[rng.integers(0, len(products), size=n)].reset_index(drop=True)
     qty = rng.choice([1, 2, 3, 4, 5], size=n, p=[0.7, 0.18, 0.07, 0.03, 0.02])
@@ -228,7 +229,8 @@ def build_day_orders(day: date, customers: pd.DataFrame, products: pd.DataFrame)
     upd = df[refund].copy()
     delay = rng.integers(1, 15, size=len(upd))
     upd["status"] = "refunded"
-    upd["updated_ts"] = [t + timedelta(days=int(d), hours=int(rng.integers(0, 10))) for t, d in zip(upd["order_ts"], delay)]
+    upd["updated_ts"] = [t + timedelta(days=int(d), hours=int(rng.integers(0, 10)))
+                         for t, d in zip(upd["order_ts"], delay, strict=True)]
     return DayOrders(clean=df, updates=upd)
 
 
@@ -265,7 +267,7 @@ def make_messy(df: pd.DataFrame, day: date, legacy: bool) -> pd.DataFrame:
         for col in ("unit_price", "total_amount"):
             df.loc[zar, col] = df.loc[zar, col].map(lambda v: f"R{float(v):,.2f}")
         fmt = np.where(pick(MESS["legacy_date_format"]), "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S")
-        df["order_ts"] = [t.strftime(f) for t, f in zip(df["order_ts"], fmt)]
+        df["order_ts"] = [t.strftime(f) for t, f in zip(df["order_ts"], fmt, strict=True)]
         df["updated_ts"] = [t.strftime("%Y-%m-%d %H:%M:%S") for t in df["updated_ts"]]
 
     dup = df[pick(MESS["duplicate_row"])]
@@ -317,17 +319,16 @@ def _num(v):
 def build_payments(orders: pd.DataFrame, refunds: pd.DataFrame, end: date) -> pd.DataFrame:
     """The payment provider's view of the world. Amounts are in MINOR units (cents), like Stripe."""
     rows = []
-    refund_ts = dict(zip(refunds["order_id"], refunds["updated_ts"]))
+    refund_ts = dict(zip(refunds["order_id"], refunds["updated_ts"], strict=True))
     for day, day_orders in orders.groupby(orders["order_ts"].map(lambda t: t.date())):
         rng = rng_for(4, day.toordinal())
         for r in day_orders.itertuples():
             paid_at = r.order_ts.astimezone(timezone.utc) + timedelta(seconds=int(rng.integers(5, 180)))
             cents = int(round(r.total_amount * 100))
             cur = r.currency.lower()
-            pid = lambda: "pay_" + "".join(rng.choice(list("0123456789abcdef"), 16))  # noqa: E731
             u = rng.random(5)
             if u[0] < PAYMENT_ISSUES["failed_first_attempt"] or r.status == "cancelled":
-                rows.append(_pay(pid(), r.order_id, cents, cur, "failed", paid_at - timedelta(seconds=40)))
+                rows.append(_pay(_payment_id(rng), r.order_id, cents, cur, "failed", paid_at - timedelta(seconds=40)))
             if r.status == "cancelled" or u[1] < PAYMENT_ISSUES["unpaid"]:
                 continue
             amount = cents
@@ -336,16 +337,21 @@ def build_payments(orders: pd.DataFrame, refunds: pd.DataFrame, end: date) -> pd
             status, updated = "succeeded", paid_at
             if r.order_id in refund_ts and refund_ts[r.order_id].date() <= end:
                 status, updated = "refunded", refund_ts[r.order_id].astimezone(timezone.utc)
-            rows.append(_pay(pid(), r.order_id, amount, cur, status, paid_at, updated))
+            rows.append(_pay(_payment_id(rng), r.order_id, amount, cur, status, paid_at, updated))
             if u[3] < PAYMENT_ISSUES["double_charge"]:
-                rows.append(_pay(pid(), r.order_id, amount, cur, "succeeded", paid_at + timedelta(minutes=2)))
+                second_at = paid_at + timedelta(minutes=2)
+                rows.append(_pay(_payment_id(rng), r.order_id, amount, cur, "succeeded", second_at))
         # Orphans: payments the shop has no record of
         for _ in range(int(rng.binomial(len(day_orders), PAYMENT_ISSUES["orphan_payment"]))):
             t = datetime(day.year, day.month, day.day, int(rng.integers(6, 22)), tzinfo=timezone.utc)
-            rows.append(_pay("pay_" + "".join(rng.choice(list("0123456789abcdef"), 16)),
+            rows.append(_pay(_payment_id(rng),
                              f"KG-{day:%Y%m%d}-9{rng.integers(1000, 9999)}",
                              int(rng.integers(5000, 200000)), "zar", "succeeded", t))
     return pd.DataFrame(rows)
+
+
+def _payment_id(rng: np.random.Generator) -> str:
+    return "pay_" + "".join(rng.choice(list("0123456789abcdef"), 16))
 
 
 def _pay(pid, order_id, amount, currency, status, created, updated=None):

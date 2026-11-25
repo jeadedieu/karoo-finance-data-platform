@@ -18,8 +18,8 @@ Try it:  python -m src.extract
 from __future__ import annotations
 
 import json
-import math
 import logging
+import math
 import random
 import time
 from datetime import date, datetime, timedelta, timezone

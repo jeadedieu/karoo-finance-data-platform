@@ -1,0 +1,72 @@
+# Continuous Integration: on every push and pull request, GitHub spins up a fresh
+# Linux machine and a PostgreSQL database, then proves the project still works:
+#   1. lint        - code style and common bugs (ruff)
+#   2. tests       - unit tests + integration tests against real PostgreSQL (pytest)
+#   3. end-to-end  - generate a month of data, run the real pipeline, build + test dbt
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: karoo
+          POSTGRES_PASSWORD: karoo
+          POSTGRES_DB: karoo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U karoo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: karoo
+      DB_PASSWORD: karoo
+      DB_NAME: karoo_test
+      PAYMENTS_API_URL: http://127.0.0.1:8000
+      PAYMENTS_API_KEY: ci-only-key
+      CHAOS: "0"                       # calm API in CI: retries are covered by unit tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit and integration tests
+        run: pytest -v
+
+      - name: "End-to-end: generate one month of source data"
+        run: python simulator/generate_data.py --end 2025-11-30
+
+      - name: "End-to-end: start the payments API"
+        run: |
+          python simulator/payments_api.py &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/health && exit 0; sleep 1; done
+          echo "payments API did not start" && exit 1
+
+      - name: "End-to-end: run the pipeline (extract + load)"
+        run: python -m src.pipeline
+
+      - name: "End-to-end: dbt build (models + 46 tests)"
+        run: python -m src.transform build
