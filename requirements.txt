@@ -1,5 +1,9 @@
 pandas
+numpy
 sqlalchemy
 psycopg[binary]
 requests
 python-dotenv
+faker
+fastapi
+uvicorn
