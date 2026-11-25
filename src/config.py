@@ -18,7 +18,7 @@ DATA_DIR = ROOT / "data"
 ORDERS_DIR = DATA_DIR / "orders"
 
 # --- APIs ---------------------------------------------------------------------
-FX_API_URL = "https://api.frankfurter.dev/v2/rates"
+FX_API_URL = os.environ.get("FX_API_URL", "https://api.frankfurter.dev/v2/rates")
 PAYMENTS_API_URL = os.environ.get("PAYMENTS_API_URL", "http://127.0.0.1:8000")
 PAYMENTS_API_KEY = os.environ.get("PAYMENTS_API_KEY", "")
 

@@ -8,6 +8,10 @@ The pipeline: Extract -> Load for every source, incremental by default.
       Backfill / reprocess: (re)load order files for a date range.
       Safe to repeat - the files' old rows are replaced, never duplicated.
 
+  python -m src.pipeline --step payments
+      Run ONE step only (reference, fx, payments or orders). Airflow uses this,
+      so each source is a separate task that can fail and retry on its own.
+
 Each run_* function is one independent step. In Step 6, Airflow calls them as tasks.
 """
 from __future__ import annotations
@@ -62,17 +66,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Karoo Goods pipeline (extract + load).")
     parser.add_argument("--orders-from", type=date.fromisoformat, help="reprocess order files from this date")
     parser.add_argument("--orders-to", type=date.fromisoformat, help="...up to this date (inclusive)")
+    parser.add_argument("--step", choices=["all", "reference", "fx", "payments", "orders"], default="all",
+                        help="run a single step (default: all)")
     args = parser.parse_args()
 
     config.setup_logging()
     engine = load.get_engine()
     load.ensure_schema(engine)
 
-    run_reference(engine)
-    run_fx(engine)
-    run_payments(engine)
-    run_orders(engine, args.orders_from, args.orders_to)
-    log.info("pipeline finished")
+    steps = {
+        "reference": lambda: run_reference(engine),
+        "fx": lambda: run_fx(engine),
+        "payments": lambda: run_payments(engine),
+        "orders": lambda: run_orders(engine, args.orders_from, args.orders_to),
+    }
+    for name, step in steps.items():
+        if args.step in ("all", name):
+            step()
+    log.info("pipeline finished (%s)", args.step)
 
 
 if __name__ == "__main__":

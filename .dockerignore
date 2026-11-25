@@ -1,0 +1,8 @@
+# Only requirements.txt is copied into the image; keep the build context small.
+.venv/
+.git/
+data/
+warehouse/target/
+warehouse/logs/
+logs/
+**/__pycache__/

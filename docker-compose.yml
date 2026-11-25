@@ -1,0 +1,137 @@
+# The whole Karoo Goods data platform in one command:   docker compose up -d
+#
+#   warehouse-db        PostgreSQL warehouse (raw, staging, marts...)   -> localhost:5433 (pgAdmin)
+#   payments-api        simulated payment provider                       -> localhost:8000/docs
+#   airflow-apiserver   Airflow UI + API                                 -> localhost:8080
+#   airflow-scheduler   decides what runs when, and runs the tasks (LocalExecutor)
+#   airflow-dag-processor  reads the DAG files in ./dags
+#   airflow-db          Airflow's own metadata database (not your data)
+#
+# LOCAL DEVELOPMENT ONLY: passwords are simple and the UI has no login.
+
+x-airflow-common: &airflow-common
+  build: .
+  image: karoo-airflow:3.4.0
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: karoo-local-dev-jwt-secret
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Africa/Johannesburg
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "30"
+    # --- settings for the pipeline tasks (override .env inside the containers) ---
+    KAROO_HOME: /opt/karoo
+    KAROO_PYTHON: /opt/karoo-venv/bin/python
+    DB_HOST: warehouse-db
+    DB_PORT: "5432"
+    DB_USER: karoo
+    DB_PASSWORD: karoo
+    DB_NAME: karoo
+    PAYMENTS_API_URL: http://payments-api:8000
+    PAYMENTS_API_KEY: dev-secret-key
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - .:/opt/karoo                      # the project folder: code changes apply immediately
+    - airflow-logs:/opt/airflow/logs
+  depends_on: &airflow-depends
+    airflow-db:
+      condition: service_healthy
+    warehouse-db:
+      condition: service_healthy
+
+services:
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  warehouse-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: karoo
+      POSTGRES_PASSWORD: karoo
+      POSTGRES_DB: karoo
+    ports:
+      - "5433:5432"                      # 5433 on your PC, so it never clashes with a local PostgreSQL
+    volumes:
+      - warehouse-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "karoo"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  payments-api:
+    build: .
+    image: karoo-airflow:3.4.0
+    entrypoint: ["/opt/karoo-venv/bin/python", "simulator/payments_api.py"]
+    working_dir: /opt/karoo
+    environment:
+      API_HOST: 0.0.0.0
+      PAYMENTS_API_KEY: dev-secret-key
+    volumes:
+      - .:/opt/karoo
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    command: db migrate                  # create/upgrade Airflow's metadata tables, then exit
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-apiserver:
+        condition: service_healthy
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  airflow-db:
+  warehouse-db:
+  airflow-logs:

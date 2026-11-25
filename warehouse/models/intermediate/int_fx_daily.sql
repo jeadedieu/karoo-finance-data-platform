@@ -2,7 +2,13 @@
 -- when the ECB publishes nothing: those days carry forward the last published rate.
 -- ZAR is added with a rate of 1 so every order can use the same join.
 with calendar as (
-    select generate_series(min(rate_date), current_date, interval '1 day')::date as rate_date
+    -- From the first published rate up to today OR the latest order, whichever is later,
+    -- so an order can never fall outside the calendar (e.g. during a backfill).
+    select generate_series(
+        min(rate_date),
+        greatest(current_date, (select max(order_date_local) from {{ ref('stg_orders') }})),
+        interval '1 day'
+    )::date as rate_date
     from {{ ref('stg_fx_rates') }}
 ),
 

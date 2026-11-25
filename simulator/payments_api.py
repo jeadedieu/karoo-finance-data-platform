@@ -96,5 +96,7 @@ def list_payments(
 
 
 if __name__ == "__main__":
-    print(f"Payments API on http://127.0.0.1:8000  (chaos {'ON' if CHAOS else 'OFF'}) - Ctrl+C to stop")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    # In Docker the API must listen on all interfaces (0.0.0.0) so other containers can reach it.
+    host = os.environ.get("API_HOST", "127.0.0.1")
+    print(f"Payments API on http://{host}:8000  (chaos {'ON' if CHAOS else 'OFF'}) - Ctrl+C to stop")
+    uvicorn.run(app, host=host, port=8000, log_level="warning")
