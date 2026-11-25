@@ -1,0 +1,13 @@
+# Secrets - never upload
+.env
+
+# Virtual environment - rebuilt with: pip install -r requirements.txt
+.venv/
+
+# Data files
+data/
+
+# Python clutter
+__pycache__/
+*.pyc
+.pytest_cache/
