@@ -18,6 +18,7 @@ Try it:  python -m src.extract
 from __future__ import annotations
 
 import json
+import math
 import logging
 import random
 import time
@@ -227,7 +228,9 @@ def _read_orders_json(path: Path) -> pd.DataFrame:
                 if not isinstance(value, dict) or k not in value:
                     raise ExtractError(f"{path.name}: record {i} has no field {'.'.join(keys)}")
                 value = value[k]
-            row[col] = None if value is None else str(value)
+            # Python-made JSON sometimes contains NaN for "missing": treat it like null
+            is_missing = value is None or (isinstance(value, float) and math.isnan(value))
+            row[col] = None if is_missing else str(value)
         rows.append(row)
     return pd.DataFrame(rows, columns=ORDER_COLUMNS)
 

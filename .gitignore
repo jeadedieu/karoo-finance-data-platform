@@ -4,10 +4,17 @@
 # Virtual environment - rebuilt with: pip install -r requirements.txt
 .venv/
 
-# Data files
+# Data files (regenerate with: python simulator/generate_data.py)
 data/
 
 # Python clutter
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# dbt build output (regenerated on every run)
+warehouse/target/
+warehouse/logs/
+warehouse/dbt_packages/
+logs/
+warehouse/.user.yml

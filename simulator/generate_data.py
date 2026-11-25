@@ -286,21 +286,29 @@ def write_order_file(df: pd.DataFrame, day: date, out_dir: Path) -> Path:
             "id": r["order_id"],
             "created_at": r["order_ts"].isoformat(),
             "updated_at": r["updated_ts"].isoformat(),
-            "customer": {"id": r["customer_id"], "country": r["country"]},
+            "customer": {"id": _text(r["customer_id"]), "country": _text(r["country"])},
             "line": {"sku": r["product_id"], "qty": _num(r["quantity"]), "unit_price": _num(r["unit_price"])},
             "currency": r["currency"],
             "total": _num(r["total_amount"]),
             "status": r["status"],
         })
     path = out_dir / f"orders_{day}.json"
-    path.write_text(json.dumps({"export_date": day.isoformat(), "orders": records}, indent=1), encoding="utf-8")
+    body = json.dumps({"export_date": day.isoformat(), "orders": records}, indent=1, allow_nan=False)
+    path.write_text(body, encoding="utf-8")
     return path
 
 
+def _text(v):
+    """Missing values must be JSON null, not NaN (NaN isn't valid JSON)."""
+    return None if v is None or (isinstance(v, float) and pd.isna(v)) else v
+
+
 def _num(v):
-    """JSON-friendly number: whole numbers stay ints (qty 1, not 1.0)."""
+    """JSON-friendly number: whole numbers stay ints (qty 1, not 1.0); missing -> null."""
     if v is None or isinstance(v, str):
         return v
+    if pd.isna(v):
+        return None
     v = float(v)
     return int(v) if v.is_integer() else v
 

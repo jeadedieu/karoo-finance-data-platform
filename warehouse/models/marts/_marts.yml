@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: One row per real person; duplicate accounts merged into the oldest.
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: email
+        data_tests: [unique, not_null]
+
+  - name: fct_orders
+    description: One row per valid order, converted to rand at the order day's exchange rate.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: rate_to_zar
+        description: Every valid order must find an exchange rate.
+        data_tests: [not_null]
+      - name: customer_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: product_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [completed, refunded, cancelled]
+
+  - name: orders_quarantine
+    description: Orders that failed validation, with the reason and source file/row.
+
+  - name: mart_daily_revenue
+    description: Daily gross, refunded and net revenue in rand by country and category.
+
+  - name: mart_fx_impact
+    description: Monthly FX impact on foreign revenue versus a constant baseline rate.
+
+  - name: mart_payment_reconciliation
+    description: One row per order or unmatched payment, with a reconciliation status.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: recon_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [matched, unpaid, double_charge, amount_mismatch, currency_mismatch,
+                         orphan_payment, ok_cancelled, paid_but_cancelled, order_in_quarantine]

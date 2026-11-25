@@ -7,3 +7,5 @@ python-dotenv
 faker
 fastapi
 uvicorn
+dbt-core>=1.12,<2
+dbt-postgres>=1.11,<2

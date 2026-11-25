@@ -1,0 +1,31 @@
+# dbt project: turns the raw layer into clean, tested, business-ready tables.
+name: karoo
+version: "1.0.0"
+profile: karoo
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages", "logs"]
+
+vars:
+  # FX impact is measured against this "constant" rate period (first full month of trading)
+  fx_baseline_month: "2025-11-01"
+  local_timezone: "Africa/Johannesburg"
+
+models:
+  karoo:
+    staging:        # 1:1 with sources: rename, cast, clean. Cheap views.
+      +schema: staging
+      +materialized: view
+    intermediate:   # business logic building blocks (dedupe, validation, FX fill-forward)
+      +schema: intermediate
+      +materialized: view
+    marts:          # what Finance queries: stored as tables for speed
+      +schema: marts
+      +materialized: table
+
+seeds:
+  karoo:
+    +schema: reference

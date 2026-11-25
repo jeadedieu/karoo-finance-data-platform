@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Data landed by the Python pipeline (src/pipeline.py), exactly as delivered, all values as text.
+    schema: raw
+    loaded_at_field: _loaded_at
+    freshness:                      # `dbt source freshness` alerts if the pipeline stops loading
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 72, period: hour}
+    tables:
+      - name: orders
+        description: Every row of every daily order export, duplicates included. CSV until 2026-05-31, JSON after.
+      - name: payments
+        description: Latest state of every payment from the payment provider API. Amounts in minor units (cents).
+      - name: fx_rates
+        description: ECB reference rates from the Frankfurter API. Working days only.
+        freshness:
+          warn_after: {count: 4, period: day}   # rates pause over long weekends, so allow more slack
+      - name: customers
+        freshness: null
+      - name: products
+        freshness: null

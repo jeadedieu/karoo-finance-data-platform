@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_payments
+    description: Payments with amounts in major units (cents / 100) and SA-local payment date.
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [succeeded, failed, refunded]
+      - name: currency
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [ZAR, USD, EUR, GBP]
+
+  - name: stg_customers
+    description: Every customer account; duplicate sign-ups point to the oldest account via canonical_customer_id.
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: canonical_customer_id
+        data_tests: [not_null]
+
+  - name: stg_products
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+
+  - name: stg_fx_rates
+    columns:
+      - name: rate_to_zar
+        data_tests:
+          - not_null
+          - dbt_expect_positive

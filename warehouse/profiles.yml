@@ -1,0 +1,14 @@
+# Connection settings. Values come from environment variables (loaded from .env
+# by src/transform.py), so no password is ever written here.
+karoo:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DB_HOST', 'localhost') }}"
+      port: "{{ env_var('DB_PORT', '5432') | as_number }}"
+      user: "{{ env_var('DB_USER') }}"
+      password: "{{ env_var('DB_PASSWORD') }}"
+      dbname: "{{ env_var('DB_NAME', 'karoo') }}"
+      schema: analytics
+      threads: 4

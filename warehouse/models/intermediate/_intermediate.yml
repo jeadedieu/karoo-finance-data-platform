@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: int_orders_deduped
+    description: Latest version of each order across all files.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+
+  - name: int_fx_daily
+    description: Rate for every calendar day; gaps (weekends, holidays) carry forward the last published rate.
+    columns:
+      - name: rate_to_zar
+        data_tests: [not_null]
